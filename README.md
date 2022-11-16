@@ -202,7 +202,7 @@ docker run --rm -ti \
     -v "/opt/plex/Library/Application Support/Plex Media Server:/plexdir" \
     -v /home/YOU/Plex-Stuff/.env:/.env \
     -v /home/YOU/Plex-Stuff/logs:/logs \
-    ghcr.io/chazlarson/plex-stuff:latest
+    ghcr.io/chazlarson/pbf:latest
 ```
 
 In this case, I'm assuming that all the plex paths are in the same root, as the env contains:
