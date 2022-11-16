@@ -195,7 +195,7 @@ The script will NOT log any individual file actions.  That list can be quite lon
 
 ### Using this script in Docker
 
-Base your `.env` on `.env.docker`, then run in docker like this [changing paths to suit, of course:
+Base your `.env` on `.env.docker`, then run in docker like this [changing paths to suit, of course]:
 
 ```
 docker run --rm -ti \
