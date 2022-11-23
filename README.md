@@ -213,7 +213,7 @@ TC_PATH=/plexdir/Cache/PhotoTranscoder/
 DB_PATH=/plexdir/Plug-in Support/Databases/
 ```
 
-So we map just the one path [`/plexdir`]  If your setup is more complicated, you'll need to acoutn for that in your config/volume maps.
+So we map just the one path [`/plexdir`]  If your setup is more complicated, you'll need to account for that in your config/volume maps.
 
 You can also probably specify anything in the `.env` as an environment variable, but no testing has been done on that mostly because the script won't run without a `.env` anyway.
 
