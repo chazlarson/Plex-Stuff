@@ -4,9 +4,10 @@
 ## Requirements
 
 1. A system that can run Python3
-1. Python3 installed on that system
-1. Prefereable to also have a system that can run powershell
-1. Preferable to have a system that can also run Power Automate Desktop Flows
+2. Python3 installed on that system
+3. Preferable to also have a system that can run powershell
+4. Preferable to have a system that can also run Power Automate Desktop Flows
+5. System that has ImageMagick installed
 
 ## Setup
 
@@ -282,6 +283,8 @@ Imagemagick must be installed - https://imagemagick.org/script/download.php
 
 font must be installed on system and visible by Imagemagick. Make sure that you install the ttf font for ALL users as an admin so ImageMagick has access to the font when running (r-click on font Install for ALL Users in Windows)
 
+Powershell version 7.x or greater: https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows?view=powershell-7.3
+
 Powershell security settings: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-7.2
 
 ### PARAMETERS
@@ -292,6 +295,8 @@ Powershell security settings: https://learn.microsoft.com/en-us/powershell/modul
 `-logo_resize`   (1000 will resize the log to fit in the poster.DEFAULT=1800.)
 
 `-base_color`    (hex color code for the base background. If omitted a random color will be picked using the "#xxxxxx" format)
+
+`-gradient`      (0=none, 1=center-out-fade, 2=bottom-up-fade, 3=top-down-fade, 4=bottom-top-fade, default=1)
 
 `-text`          (text that you want to show on the resulting image. use \n to perform a carriage return and enclose text in double quotes.)
 
@@ -337,6 +342,7 @@ Create a poster with the Spotify.png and specified background color of "#FB19B9"
 
 ![](images/create_poster-example1.png)
 ![](images/create_poster-example2.png)
+![](images/create_poster-example3.png)
 
 ## advanced-plex-edits
 
@@ -386,6 +392,8 @@ This Powershell script will scan your transparent images for anomalies like head
 ### REQUIREMENTS
 $images_location=is the path to the directory with the transparent images to verify
 
+Powershell version 7.x or greater: https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows?view=powershell-7.3
+
 Powershell security settings: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-7.2
 
 ### PARAMETERS
@@ -410,23 +418,54 @@ This Powershell script will find and download people posters/images for PMM/PLEX
 - bw-style
 - rainier-style
 - original-style
+- signature-style
 - transparent
  
 ### REQUIREMENTS
-$metalog_location=is the path to the logs directory for PMM
+$metalog_location=   is the directory path to scan the PMM directory logs (meta*.log)
+
+Powershell version 7.x or greater: https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows?view=powershell-7.3
 
 Powershell security settings: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-7.2
 
-Power Automate Desktop on a Windows Machine with the flow that will access Adobe Express Online (https://express.adobe.com/tools/remove-background) to remove backgrounds in an automated fashion
+Imagemagick must be installed - https://imagemagick.org/script/download.php
 
-If PAD not working, then dump transparent images that were 1:1.5 in ratio and resized to 2000x3000 in png format and within the Downloads subdirectory
+$flowName=           is the PAD Flow name that you want to call for your setup
+
+If your system is missing fonts, you will be prompted to install the ones that are extracted before continuing
+
+PAD Flows included in this repo are:
+- `remove backgrounds chrome-en windows-en`    => Windows OS is in English and Chrome in English
+- `remove backgrounds edge-en windows-en`      => Windows OS is in English and Edge in English
+- `remove backgrounds edge-en windows-fr`      => Windows OS is in French and Edge in English
+- `remove backgrounds edge-fr windows-fr`      => Windows OS is in French and Edge in French
+
+Power Automate Desktop on a Windows Machine with the flow that will access Adobe Express Online ( https://express.adobe.com/tools/remove-background ) to remove backgrounds in an automated fashion. Download found here ( https://go.microsoft.com/fwlink/?linkid=2102613 ). Ensure that you install the chrome and edge web browser extensions.
+
+PAD Installation steps
+1. Install PAD and Extensions
+2. Create a new flow and name it as one of the flows included in this repo (described above)
+![](images/step2.png)
+3. Open the text file flow in a text editor and select all the text (ctrl-a) and copy it (ctrl-c)
+![](images/step3.png)
+4. In the newly created flow, paste (ctrl-v) the text in the "white" empty area
+![](images/step4.png)
+5. You should see all the steps pasted into the GUI
+![](images/step5.png)
+6. Save the flow
 
 ### PARAMETERS
 `-metalog_location`          (specify the logs folder location for PMM)
 
-### EXAMPLES
-Run script against the \\NZWHS01\appdata\Plex-Meta-Manager\logs folder
+`-flowName`                  (specify the flow name that you want to use)
 
-`.\create_people_poster.ps1 -metalog_location \\NZWHS01\appdata\Plex-Meta-Manager\logs`
+### EXAMPLES
+Run script against the \\NZWHS01\appdata\Plex-Meta-Manager\logs folder on a Windows English machine with Chrome in English
+
+`.\create_people_poster.ps1 -metalog_location \\NZWHS01\appdata\Plex-Meta-Manager\logs -flowname "remove backgrounds chrome-en windows-en"`
+
+Run script against a folder where you copied some meta*.log files from D:\logs on a Windows English machine with Edge in English
+
+`.\create_people_poster.ps1 -metalog_location D:\logs -flowname "remove backgrounds edge-en windows-en"`
 
 ![](images/create_people_poster-example1.png)
