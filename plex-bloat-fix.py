@@ -3,7 +3,6 @@
 ####################################################################
 # PlexAPI
 # python-dotenv
-# SQLAlchemy
 
 __version__ = "1.3.5"
 from xmlrpc.client import Boolean
@@ -318,6 +317,16 @@ try:
 except:
     SLEEP = 60
 
+try:
+    OVERRIDE_PLEX_RUNNING_WARNING = Boolean(int(os.getenv("OVERRIDE_PLEX_RUNNING_WARNING")))
+except:
+    OVERRIDE_PLEX_RUNNING_WARNING = False
+
+try:
+    FORCE_CLEAR_TEMP = Boolean(int(os.getenv("FORCE_CLEAR_TEMP")))
+except:
+    FORCE_CLEAR_TEMP = False
+
 send_notifiarr("INFO", color_g, "PBF started", "N/A", "N/A", "N/A", "N/A", "INFO", "PBF Plex Bloat Fix has started")
 chk_ver()
 drawLine()
@@ -328,6 +337,18 @@ local_run = os.path.isdir(DB_PATH)
 
 if local_run:
     log_line("DB_PATH VALID:","This is a local run which will COPY the database")
+    db_tmp01 = Path(f"{DB_PATH}/{PLEX_DB_NAME}-shm")
+    db_tmp02 = Path(f"{DB_PATH}/{PLEX_DB_NAME}-wal")
+    if db_tmp01.is_file() or db_tmp02.is_file():
+        send_notifiarr("ERROR", color_r, "Plex is running", "Issue:", "Plex is running", "Detail:", "", "ERROR", "At least one of the SQLite temp files is next to the Plex DB; this indicates Plex is still running and the DB can't be safely copied.")
+        if OVERRIDE_PLEX_RUNNING_WARNING:
+            log_line(f"WARNING:",f"You've overridden the 'Plex is running; warning.")
+            log_line(f"WARNING:",f"The script will continue, but results may not be optimal.")
+            x = input('Enter y to continue:')
+            if x != 'y':
+                exit()
+        else:
+            log_error_and_exit(f"Plex is running, exiting")
 else:
     log_line("DB_PATH INVALID:","This is a remote run which will DOWNLOAD the database")
 
@@ -353,8 +374,11 @@ if not Path(TMP_DIR).is_dir():
     log_error_and_exit(f"TMP_DIR is not a directory: {TMP_DIR}")
 
 if len(os.listdir(TMP_DIR)) > 0:
-    send_notifiarr("ERROR", color_r, "PBF temp directory not empty", "Issue:", "TMP_DIR is not empty", "Detail:", TMP_DIR, "ERROR", "TMP_DIR is not empty. Navigate to this directory and ensure it is empty")
-    log_error_and_exit(f"TMP_DIR is not empty:       {TMP_DIR}")
+    if FORCE_CLEAR_TEMP:
+        clear_tmp()
+    else:
+        send_notifiarr("ERROR", color_r, "PBF temp directory not empty", "Issue:", "TMP_DIR is not empty", "Detail:", TMP_DIR, "ERROR", "TMP_DIR is not empty. Navigate to this directory and ensure it is empty")
+        log_error_and_exit(f"TMP_DIR is not empty:       {TMP_DIR}")
 
 PLEX_URL = os.getenv("PLEX_URL")
 if PLEX_URL is None:
@@ -367,22 +391,21 @@ if PLEX_TOKEN is None:
     log_error_and_exit("PLEX_TOKEN is not defined.")
 
 dbpath = ""
-file_size_tot = 0
-file_size_del = 0
-file_size_sub = 0
-file_sub = 0
-file_size_sub_del = 0
-file_sub_del = 0
+total_file_size = 0
+deleted_file_size = 0
+section_file_size = 0
+section_file_count = 0
+section_deleted_file_size = 0
+section_deleted_file_count = 0
 
 ####################################################################
 # MAIN
 ####################################################################
-SQLCMD1 = (
-    "SELECT user_thumb_url FROM metadata_items WHERE user_thumb_url like 'upload://%';"
+SQLCMD = (
+    "SELECT FIELD_NAME FROM metadata_items WHERE FIELD_NAME like 'upload://%' OR FIELD_NAME like 'metadata://%';"
 )
-SQLCMD2 = (
-    "SELECT user_art_url FROM metadata_items WHERE user_art_url like 'upload://%';"
-)
+
+FIELDS = ["user_thumb_url", "user_art_url", "user_banner_url"]
 
 LIBS = ["Movies", "TV Shows", "Playlists", "Collections", "Artists", "Albums"]
 
@@ -471,7 +494,9 @@ try:
     ####################################################################
     # Connect to Plexserver
     ####################################################################
-    ps = PlexServer(PLEX_URL, PLEX_TOKEN, timeout=600)
+    ps = None
+    if not local_run:
+        ps = PlexServer(PLEX_URL, PLEX_TOKEN, timeout=600)
 
     ####################################################################
     # clear the download target dir
@@ -531,37 +556,23 @@ try:
             send_notifiarr("ERROR", color_r, "PBF Plex DB issue", "Issue:", "Database cannot be found", "N/A", "N/A", "N/A", "N/A")
             log_error_and_exit(f"ERROR:",f"Database cannot be found")
 
-        log_line(f"STATUS:",f"Executing {SQLCMD1}")
-        cursor1 = conn.execute(SQLCMD1)
-        log_line(f"STATUS:",f"Executing {SQLCMD2}")
-        cursor2 = conn.execute(SQLCMD2)
-        BLOAT_RUN = True
-    else:
-        send_notifiarr("ERROR", color_r, "PBF Plex DB issue", "Issue:", f"No extracted database found in: {TMP_DIR}. Try to download manually in PLEX and look at logs for any errors. If the downloaded file is a 22kb zip file, there maybe PLEX db issue to address. PBF will continue, though nothing will be deleted from the Metadata subdirectories.", "N/A", "N/A", "N/A", "N/A")
-        log_error(f"No extracted database found in: {TMP_DIR}")
-        log_line("",f"Try to download manually in PLEX and look at logs for any errors")
-        log_line("",f"If the downloaded file is a 22kb zip file, there maybe PLEX db issue to address.")
-        log_line("",f"PBF will continue, though nothing will be deleted from the Metadata subdirectories.")
-        BLOAT_RUN = False
-
-    ####################################################################
-    # Building list of selected uploaded posters
-    ####################################################################
-    if BLOAT_RUN:
+        ####################################################################
+        # Building list of selected uploaded posters
+        ####################################################################
         log_line(f"STATUS:",f"Building list of selected uploaded posters")
         res_sql = []
-        for row in cursor1:
-            p = urlparse(row[0])
-            tmp = p.path.rsplit("/", 1).pop()
-            # print("ID = ", tmp)
-            res_sql.append(tmp)
-        for row in cursor2:
-            p = urlparse(row[0])
-            tmp = p.path.rsplit("/", 1).pop()
-            # print("ID = ", tmp)
-            res_sql.append(tmp)
-
-        log_line(f"STATUS:",f"Pulled {len(res_sql)} upload items from the database")
+        
+        for field in FIELDS:
+            query_text = SQLCMD.replace('FIELD_NAME', field)
+            log_line(f"STATUS:",f"Executing {query_text}")
+            cursor = conn.execute(query_text)
+            for row in cursor:
+                p = urlparse(row[0])
+                tmp = p.path.rsplit("/", 1).pop()
+                # print("ID = ", tmp)
+                res_sql.append(tmp)
+        
+        log_line(f"STATUS:",f"Pulled {len(res_sql)} in-use images items from the database")
 
         conn.close()
         clear_tmp()
@@ -572,14 +583,17 @@ try:
         log_line(f"STATUS:",f"Building list of files to compare")
 
         res = []
-        file_tot = 0
-        file_del = 0
-        file_sub_del = 0
-        file_sub = 0
-        file_size_tot = 0
-        file_size_del = 0
-        file_size_sub_del = 0
-        file_size_sub = 0
+        total_file_count = 0
+        total_file_size = 0
+
+        deleted_file_count = 0
+        deleted_file_size = 0
+
+        section_file_count = 0
+        section_file_size = 0
+
+        section_deleted_file_count = 0
+        section_deleted_file_size = 0
 
         for DIR_PATH in DIR_PATH_ARR:
             sub_start = time.time()
@@ -591,44 +605,54 @@ try:
                     q = Path(DIR_PATH) / file
                     if not q.is_symlink():
                         file_size = q.stat().st_size
-                        file_size_tot += file_size
-                        file_size_sub += file_size
-                        file_tot += 1
-                        file_sub += 1
-                    if ("." not in file and file not in res_sql) or ".jpg" in file:
-                        file_size_del += file_size
-                        file_size_sub_del += file_size
-                        file_del += 1
-                        file_sub_del += 1
-                        handle_file(q)
+                        section_file_size += file_size
+                        section_file_count += 1
+                    if 'Contents' not in DIR_PATH:
+                        if ("." not in file and file not in res_sql) or ".jpg" in file:
+                            section_deleted_file_size += file_size
+                            section_deleted_file_count += 1
+                            handle_file(q)
+
+            total_file_size += section_file_size
+            total_file_count += section_file_count
+            deleted_file_size += section_deleted_file_size
+            deleted_file_count += section_deleted_file_count
 
             sub_end = time.time()
             stopwatch_sub = sub_end - sub_start
             pct_bloat = (
-                0 if file_size_sub == 0 else ((file_size_sub_del) / (file_size_sub))
+                0 if section_file_size == 0 else (section_deleted_file_size / section_file_size)
             )
-
 
             s_data = {}
             s_data["name"] = p.name
             s_data["stopwatch"] = sub_end - sub_start
-            s_data["pct_bloat"] = 0 if file_size_sub == 0 else ((file_size_sub_del) / (file_size_sub))
-            s_data["meta_size_total"] = file_size_sub
-            s_data["meta_ct_total"] = file_sub
-            s_data["meta_size_delete"] = file_size_sub_del
-            s_data["meta_ct_delete"] = file_sub_del
+            s_data["pct_bloat"] = pct_bloat
+            s_data["meta_size_total"] = section_file_size
+            s_data["meta_ct_total"] = section_file_count
+            s_data["meta_size_delete"] = section_deleted_file_size
+            s_data["meta_ct_delete"] = section_deleted_file_count
             s_data["tc_size_delete"] = tot_tc_file_size
             s_data["tc_ct_delete"] = tot_tc_files
             s_data["grand_total"] = False
 
             report_summary(s_data)
 
-            file_size_sub_del = 0
-            file_size_sub = 0
-            file_sub_del = 0
-            file_sub = 0
+            section_deleted_file_size = 0
+            section_file_size = 0
+            section_deleted_file_count = 0
+            section_file_count = 0
+
+    else:
+        send_notifiarr("ERROR", color_r, "PBF Plex DB issue", "Issue:", f"No extracted database found in: {TMP_DIR}. Try to download manually in PLEX and look at logs for any errors. If the downloaded file is a 22kb zip file, there maybe PLEX db issue to address. PBF will continue, though nothing will be deleted from the Metadata subdirectories.", "N/A", "N/A", "N/A", "N/A")
+        log_error(f"No extracted database found in: {TMP_DIR}")
+        log_line("",f"Try to download manually in PLEX and look at logs for any errors")
+        log_line("",f"If the downloaded file is a 22kb zip file, there maybe PLEX db issue to address.")
+        log_line("",f"PBF will continue, though nothing will be deleted from the Metadata subdirectories.")
+        BLOAT_RUN = False
 
     clear_tmp()
+
     if EMPTY_TRASH:
         et = ps.library.emptyTrash()
         drawLine()
@@ -658,7 +682,6 @@ try:
 
     end_all = time.time()
 
-
     ####################################################################
     # OVERALL SUMMARY
     ####################################################################
@@ -666,11 +689,11 @@ try:
     s_data = {}
     s_data["name"] = "Overall"
     s_data["stopwatch"] = end_all - start_all
-    s_data["pct_bloat"] = 0 if file_size_tot + tot_tc_file_size == 0 else ((file_size_del + tot_tc_file_size) / (file_size_tot + tot_tc_file_size))
-    s_data["meta_size_total"] = file_size_tot
-    s_data["meta_ct_total"] = file_tot
-    s_data["meta_size_delete"] = file_size_del
-    s_data["meta_ct_delete"] = file_del
+    s_data["pct_bloat"] = 0 if total_file_size + tot_tc_file_size == 0 else ((deleted_file_size + tot_tc_file_size) / (total_file_size + tot_tc_file_size))
+    s_data["meta_size_total"] = total_file_size
+    s_data["meta_ct_total"] = total_file_count
+    s_data["meta_size_delete"] = deleted_file_size
+    s_data["meta_ct_delete"] = deleted_file_count
     s_data["tc_size_delete"] = tot_tc_file_size
     s_data["tc_ct_delete"] = tot_tc_files
     s_data["grand_total"] = True
