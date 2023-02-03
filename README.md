@@ -25,6 +25,7 @@ All these PYTHON scripts use the same `.env` and requirements. The Unraid bash s
 
 ```
 PLEX_URL=https://plex.domain.tld                # URL for Plex; can be a domain or IP:PORT
+PLEX_URL_RETRIES=10                             # PBF will retry the PLEX_URL x times with a backoff factor before giving up and continuing
 PLEX_TOKEN=PLEX-TOKEN                           # https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/
 NOTIFIARR_ENABLED=0                             # Set to 1 to enable notifiarr
 NOTIFIARR_KEY=NOTIFIARR_KEY                     # Add notifiarr key as per the PASSTHOUGH integration on notifiarr.com
@@ -42,6 +43,8 @@ EMPTY_TRASH=0                                   # set EMPTY_TRASH=1 and the scri
 CLEAN_BUNDLES=0                                 # set CLEAN_BUNDLES=1 and the script will run the CLEAN BUNDLES operation in PLEX
 OPTIMIZE_DB=0                                   # set OPTIMIZE_DB=1 and the script will run the OPTIMIZE DB operation in PLEX
 LOG_FILE_ACTIONS=1                              # set LOG_FILE_ACTIONS=1 for VERBOSE output
+OVERRIDE_PLEX_RUNNING_WARNING=0                 # if 0, PBF will exit if Plex is currently running to avoid the risk of deleting images that have been recently added.  Set it to 1 if you haven't made recent image changes or have recently restarted Plex.
+FORCE_CLEAR_TEMP=0                              # if 0, PBF will not clear files in TMP_DIR, causing PBF to exit and ensuring that you did not accidentally place other important files in that directory
 ```
 
 ### Note on paths:
@@ -111,8 +114,10 @@ Red is deleted, Green is kept because it is the actively selected poster. The ot
 ### Usage
 1. setup as above
 2. Activate that virtualenv (NOT IN AN ADMIN PROMPT IN WINDOWS) 
-3. Run with `python plex-bloat-fix.py` - sometimes (usually when you have not setup the virtualenv for python as recommended above), you need to specify the version of python in the command like `python3.9 plex-bloat-fix.py`
-4. Make sure that you are NOT actively updating posters or title cards with PMM or TCM while running this script. Schedule this after the last run happens. So TCM, Plex Scheduled Tasks, PMM, THEN schedule or run plex-bloat-fix.py. Example: TCM @ 00:00, PLEX @ 02:00-05:00, and PMM @ 05:00
+3. IMPORTANT! Due to a recent change that PLEX made (circa Jan 2023), you SHOULD restart plex before running this script. Restarting allows for all temp SQLite files to be written to the promary plex db ensuring that we know exactly which posters have been selected and should be preserved.
+   1. if you are using plex in docker, create a script that will perform a docker restart, sleep for about 30 seconds, and then run this script. pbf.sh is an example bash script
+4. Run with `python plex-bloat-fix.py` - sometimes (usually when you have not setup the virtualenv for python as recommended above), you need to specify the version of python in the command like `python3.9 plex-bloat-fix.py`
+5. Make sure that you are NOT actively updating posters or title cards with PMM or TCM while running this script. Schedule this after the last run happens. So TCM, Plex Scheduled Tasks, PMM, THEN schedule or run plex-bloat-fix.py. Example: TCM @ 00:00, PLEX @ 02:00-05:00, and PMM @ 05:00
 
 The script will loop through all the folders as defined in your `.env` and then clean it up if you want it to.
 
